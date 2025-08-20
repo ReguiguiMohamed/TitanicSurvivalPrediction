@@ -12,6 +12,32 @@ from feature_engineering import engineer_features
 PROCESSED_DIR = Path("data/processed")
 
 
+def encode_categorical(df: pd.DataFrame) -> pd.DataFrame:
+    """Encode categorical columns using integer codes."""
+    df_encoded = df.copy()
+    cat_cols = df_encoded.select_dtypes(include=["object", "category"]).columns
+    for col in cat_cols:
+        df_encoded[col] = df_encoded[col].astype("category").cat.codes
+    return df_encoded
+
+
+def scale_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Scale numerical features to zero mean and unit variance."""
+    scaler = StandardScaler()
+    scaled = scaler.fit_transform(df)
+    return pd.DataFrame(scaled, columns=df.columns, index=df.index)
+
+
+def create_train_val_split(
+    X: pd.DataFrame,
+    y: pd.Series,
+    test_size: float = 0.2,
+    random_state: int = 42,
+):
+    """Split data into train and validation sets."""
+    return train_test_split(X, y, test_size=test_size, stratify=y, random_state=random_state)
+
+
 def split_data(X: pd.DataFrame, y: pd.Series, test_size: float = 0.2, random_state: int = 42):
     return train_test_split(X, y, test_size=test_size, stratify=y, random_state=random_state)
 

@@ -18,14 +18,32 @@ def load_model(path: Path):
 
 
 def generate_predictions(model, X: np.ndarray) -> np.ndarray:
+    """Generate predictions from a model.
+
+    The function prefers ``predict_proba`` if available, returning the
+    probability of the positive class.  Some lightweight test doubles (such as
+    ``MagicMock``) technically expose a ``predict_proba`` attribute but do not
+    return a NumPy array.  In those cases we fall back to ``predict`` to ensure
+    a sensible output.
+    """
+
     if hasattr(model, "predict_proba"):
-        return model.predict_proba(X)[:, 1]
+        probs = model.predict_proba(X)
+        if isinstance(probs, np.ndarray):
+            return probs[:, 1] if probs.ndim > 1 else probs
     return model.predict(X)
 
 
-def create_submission(passenger_ids: Iterable[int], predictions: Iterable[int | float], path: Path):
+def create_submission(
+    passenger_ids: Iterable[int],
+    predictions: Iterable[int | float],
+    path: Path | None = None,
+) -> pd.DataFrame:
+    """Create a submission DataFrame and optionally write it to disk."""
     df = pd.DataFrame({"PassengerId": passenger_ids, "Survived": predictions})
-    df.to_csv(path, index=False)
+    if path is not None:
+        df.to_csv(path, index=False)
+    return df
 
 
 def prediction_intervals(probs: np.ndarray, alpha: float = 0.05) -> np.ndarray:
