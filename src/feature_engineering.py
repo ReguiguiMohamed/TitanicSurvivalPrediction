@@ -1,12 +1,37 @@
 import pandas as pd
 
 
-def extract_title(df: pd.DataFrame) -> pd.DataFrame:
-    """Extract passenger title from the Name column."""
-    titles = df["Name"].str.extract(r",\s*([^\.]+)\.\s*")[0]
+def extract_title(data: pd.DataFrame | pd.Series) -> pd.DataFrame | pd.Series:
+    """Extract passenger title from name data.
+
+    The original implementation expected a DataFrame with a ``Name`` column and
+    returned the DataFrame with an added ``Title`` column.  However, the test
+    suite sometimes provides a ``Series`` containing names directly and expects
+    a ``Series`` of titles in return.  This function now supports both use
+    cases:
+
+    * When passed a ``Series`` it returns a ``Series`` of extracted titles.
+    * When passed a ``DataFrame`` it returns a copy of the DataFrame with a
+      ``Title`` column added.
+    """
+
+    # Determine the series of names depending on the input type
+    if isinstance(data, pd.Series):
+        names = data
+        df = None
+    else:
+        names = data["Name"]
+        df = data.copy()
+
+    titles = names.str.extract(r",\s*([^\.]+)\.\s*")[0]
     titles = titles.replace({"Mlle": "Miss", "Ms": "Miss", "Mme": "Mrs"})
     common = ["Mr", "Mrs", "Miss", "Master"]
-    df["Title"] = titles.where(titles.isin(common), "Rare")
+    titles = titles.where(titles.isin(common), "Rare")
+
+    if df is None:
+        return titles
+
+    df["Title"] = titles
     return df
 
 
