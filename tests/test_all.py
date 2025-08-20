@@ -1,4 +1,3 @@
-
 """
 Comprehensive test suite for Titanic ML Competition
 Tests all components from data loading to final predictions
@@ -16,6 +15,8 @@ from pathlib import Path
 
 # Add src to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+print(sys.path)
+print(os.listdir(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 class TestDataLoading:
     """Test data loading functionality"""
@@ -116,11 +117,11 @@ class TestPreprocessing:
     def setup_method(self):
         """Setup test data"""
         self.sample_data = pd.DataFrame({
-            'Age': [25, 35, 45],
-            'Fare': [7.25, 71.28, 30.0],
-            'Sex': ['male', 'female', 'male'],
-            'Pclass': [3, 1, 2],
-            'Embarked': ['S', 'C', 'Q']
+            'Age': [25, 35, 45, 55],
+            'Fare': [7.25, 71.28, 30.0, 50.0],
+            'Sex': ['male', 'female', 'male', 'female'],
+            'Pclass': [3, 1, 2, 1],
+            'Embarked': ['S', 'C', 'Q', 'S']
         })
     
     def test_categorical_encoding(self):
@@ -130,8 +131,8 @@ class TestPreprocessing:
             encoded_data = encode_categorical(self.sample_data.copy())
             
             # Check that categorical columns are converted to numerical
-            assert encoded_data['Sex'].dtype in [int, float], "Sex not properly encoded"
-            assert encoded_data['Embarked'].dtype in [int, float], "Embarked not properly encoded"
+            assert pd.api.types.is_numeric_dtype(encoded_data['Sex']), "Sex not properly encoded"
+            assert pd.api.types.is_numeric_dtype(encoded_data['Embarked']), "Embarked not properly encoded"
             
         except ImportError:
             pytest.skip("encode_categorical function not found")
@@ -154,18 +155,25 @@ class TestPreprocessing:
         try:
             from preprocessing import create_train_val_split
             
-            # Create dummy target
-            y = pd.Series([0, 1, 0])
-            X_train, X_val, y_train, y_val = create_train_val_split(self.sample_data, y)
+            # Create larger sample data with more balanced classes
+            larger_sample = pd.DataFrame({
+                'Age': [25, 35, 45, 55, 28, 38, 48, 58],
+                'Fare': [7.25, 71.28, 30.0, 50.0, 15.5, 25.0, 35.0, 45.0],
+                'Sex': ['male', 'female', 'male', 'female', 'male', 'female', 'male', 'female'],
+                'Pclass': [3, 1, 2, 1, 3, 2, 1, 2],
+                'Embarked': ['S', 'C', 'Q', 'S', 'S', 'C', 'Q', 'S']
+            })
             
-            assert len(X_train) + len(X_val) == len(self.sample_data), "Split doesn't preserve total size"
+            # Create dummy target with balanced classes
+            y = pd.Series([0, 1, 0, 1, 0, 1, 0, 1])
+            X_train, X_val, y_train, y_val = create_train_val_split(larger_sample, y)
+            
+            assert len(X_train) + len(X_val) == len(larger_sample), "Split doesn't preserve total size"
             assert len(X_train) == len(y_train), "X_train and y_train size mismatch"
             assert len(X_val) == len(y_val), "X_val and y_val size mismatch"
             
         except ImportError:
             pytest.skip("create_train_val_split function not found")
-
-
 class TestBaselineModels:
     """Test baseline model functionality"""
     
@@ -232,29 +240,33 @@ class TestAdvancedModels:
         })
         self.y = pd.Series(np.random.randint(0, 2, 200))
     
-    def test_xgboost_training(self):
-        """Test XGBoost model training"""
+    def test_lightgbm_tuning(self):
+        """Test LightGBM model tuning"""
         try:
-            from advanced_models import train_xgboost
-            model, score = train_xgboost(self.X, self.y)
+            from advanced_models import tune_lightgbm
+            model = tune_lightgbm(self.X.values, self.y.values, n_trials=5)
             
-            assert hasattr(model, 'predict'), "XGBoost model doesn't have predict method"
-            assert 0 <= score <= 1, f"XGBoost score {score} not in valid range"
+            assert hasattr(model, 'predict'), "LightGBM model doesn't have predict method"
             
         except ImportError:
-            pytest.skip("train_xgboost function not found")
+            pytest.skip("tune_lightgbm function not found")
     
-    def test_ensemble_methods(self):
-        """Test ensemble model training"""
+    def test_voting_classifier(self):
+        """Test voting classifier creation"""
         try:
-            from advanced_models import train_ensemble
-            ensemble, score = train_ensemble(self.X, self.y)
+            from advanced_models import create_voting_classifier
+            from sklearn.linear_model import LogisticRegression
+            from sklearn.tree import DecisionTreeClassifier
+
+            clf1 = LogisticRegression(random_state=1)
+            clf2 = DecisionTreeClassifier(random_state=1)
+
+            ensemble = create_voting_classifier([('lr', clf1), ('dt', clf2)])
             
             assert hasattr(ensemble, 'predict'), "Ensemble doesn't have predict method"
-            assert 0 <= score <= 1, f"Ensemble score {score} not in valid range"
             
         except ImportError:
-            pytest.skip("train_ensemble function not found")
+            pytest.skip("create_voting_classifier function not found")
 
 
 class TestHyperparameterTuning:
@@ -269,29 +281,29 @@ class TestHyperparameterTuning:
         })
         self.y = pd.Series(np.random.randint(0, 2, 150))
     
-    def test_optuna_optimization(self):
-        """Test Optuna hyperparameter optimization"""
+    def test_optimize_lightgbm(self):
+        """Test Optuna hyperparameter optimization for LightGBM"""
         try:
-            from hyperparameter_tuning import optimize_with_optuna
-            best_params, best_score = optimize_with_optuna(self.X, self.y, n_trials=5)
+            from hyperparameter_tuning import optimize_lightgbm
+            model, best_params = optimize_lightgbm(self.X.values, self.y.values, n_trials=5)
             
+            assert hasattr(model, 'predict'), "Optimized model doesn't have predict method"
             assert isinstance(best_params, dict), "Best params should be a dictionary"
-            assert 0 <= best_score <= 1, f"Best score {best_score} not in valid range"
             
         except ImportError:
-            pytest.skip("optimize_with_optuna function not found")
+            pytest.skip("optimize_lightgbm function not found")
     
-    def test_grid_search(self):
-        """Test grid search optimization"""
+    def test_grid_search_rf(self):
+        """Test grid search optimization for Random Forest"""
         try:
-            from hyperparameter_tuning import grid_search_optimization
-            best_params, best_score = grid_search_optimization(self.X, self.y)
+            from hyperparameter_tuning import grid_search_rf
+            model, best_params = grid_search_rf(self.X.values, self.y.values)
             
+            assert hasattr(model, 'predict'), "Optimized model doesn't have predict method"
             assert isinstance(best_params, dict), "Best params should be a dictionary"
-            assert 0 <= best_score <= 1, f"Best score {best_score} not in valid range"
             
         except ImportError:
-            pytest.skip("grid_search_optimization function not found")
+            pytest.skip("grid_search_rf function not found")
 
 
 class TestPredictions:
@@ -430,22 +442,19 @@ class TestIntegration:
             train_df, test_df = load_data()
             
             # Test feature engineering
-            from feature_engineering import apply_feature_engineering
-            train_processed = apply_feature_engineering(train_df)
-            test_processed = apply_feature_engineering(test_df)
+            from feature_engineering import engineer_features
             
             # Test preprocessing
             from preprocessing import preprocess_data
-            X_train, y_train = preprocess_data(train_processed)
-            X_test = preprocess_data(test_processed, is_test=True)
+            X_processed, X_test_processed, y, feature_names, preprocessor = preprocess_data(train_df, test_df)
             
             # Test model training
             from baseline_models import train_random_forest
-            model, score = train_random_forest(X_train, y_train)
+            model, score = train_random_forest(X_processed, y)
             
             # Test prediction
             from predictions import generate_predictions
-            predictions = generate_predictions(model, X_test)
+            predictions = generate_predictions(model, X_test_processed)
             
             assert len(predictions) == 418, f"Expected 418 predictions, got {len(predictions)}"
             assert all(pred in [0, 1] for pred in predictions), "Invalid prediction values"

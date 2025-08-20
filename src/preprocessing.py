@@ -2,30 +2,13 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import SelectKBest, f_classif
 
 from feature_engineering import engineer_features
 
 PROCESSED_DIR = Path("data/processed")
-
-
-def encode_categorical(df: pd.DataFrame) -> pd.DataFrame:
-    """Encode categorical columns using integer codes."""
-    df_encoded = df.copy()
-    cat_cols = df_encoded.select_dtypes(include=["object", "category"]).columns
-    for col in cat_cols:
-        df_encoded[col] = df_encoded[col].astype("category").cat.codes
-    return df_encoded
-
-
-def scale_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Scale numerical features to zero mean and unit variance."""
-    scaler = StandardScaler()
-    scaled = scaler.fit_transform(df)
-    return pd.DataFrame(scaled, columns=df.columns, index=df.index)
 
 
 def create_train_val_split(
@@ -42,46 +25,61 @@ def split_data(X: pd.DataFrame, y: pd.Series, test_size: float = 0.2, random_sta
     return train_test_split(X, y, test_size=test_size, stratify=y, random_state=random_state)
 
 
-def create_preprocessing_pipeline(categorical_features, numerical_features):
-    categorical_transformer = OneHotEncoder(handle_unknown="ignore")
-    numerical_transformer = StandardScaler()
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", numerical_transformer, numerical_features),
-            ("cat", categorical_transformer, categorical_features),
-        ]
-    )
-    return preprocessor
-
-
 def preprocess_data(train_df: pd.DataFrame, test_df: pd.DataFrame, target: str = "Survived"):
+    """Preprocess data with improved feature engineering."""
+    # Apply feature engineering
     train_df, test_df = engineer_features(train_df, test_df)
+    
+    # Separate features and target
     y = train_df[target]
     X = train_df.drop(columns=[target])
     X_test = test_df.copy()
-    categorical_features = X.select_dtypes(include=["object", "category"]).columns.tolist()
-    numerical_features = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
-    preprocessor = create_preprocessing_pipeline(categorical_features, numerical_features)
-    X_processed = preprocessor.fit_transform(X)
-    X_test_processed = preprocessor.transform(X_test)
-    feature_names = preprocessor.get_feature_names_out()
-    return X_processed, X_test_processed, y, feature_names, preprocessor
+    
+    # Define features to use (drop non-predictive columns)
+    cols_to_drop = ['PassengerId', 'Name', 'Ticket', 'Cabin']
+    available_cols_to_drop = [col for col in cols_to_drop if col in X.columns]
+    
+    X = X.drop(columns=available_cols_to_drop)
+    X_test = X_test.drop(columns=available_cols_to_drop)
+    
+    # Handle any remaining missing values
+    for col in X.columns:
+        if X[col].dtype in ['object']:
+            # For any remaining categorical columns, use mode
+            mode_val = X[col].mode()[0] if len(X[col].mode()) > 0 else 'Unknown'
+            X[col] = X[col].fillna(mode_val)
+            X_test[col] = X_test[col].fillna(mode_val)
+        else:
+            # For numerical columns, use median
+            median_val = X[col].median()
+            X[col] = X[col].fillna(median_val)
+            X_test[col] = X_test[col].fillna(median_val)
+    
+    # Convert to numpy arrays
+    X_processed = X.values.astype(np.float32)
+    X_test_processed = X_test.values.astype(np.float32)
+    
+    feature_names = X.columns.tolist()
+    
+    return X_processed, X_test_processed, y, feature_names, None
 
 
-def select_features(X: np.ndarray, y: pd.Series, feature_names, top_n: int = 10, corr_threshold: float = 0.9):
-    df = pd.DataFrame(X, columns=feature_names)
-    corr_matrix = df.corr().abs()
-    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-    to_drop = [column for column in upper.columns if any(upper[column] > corr_threshold)]
-    df_reduced = df.drop(columns=to_drop)
-    rf = RandomForestClassifier(n_estimators=100, random_state=42)
-    rf.fit(df_reduced, y)
-    importances = pd.Series(rf.feature_importances_, index=df_reduced.columns)
-    selected = importances.sort_values(ascending=False).head(top_n).index.tolist()
-    return selected
+def select_features(X: np.ndarray, y: pd.Series, feature_names, k: int = 15):
+    """Select top k features using statistical tests and random forest importance."""
+    
+    # Use SelectKBest for statistical feature selection
+    selector = SelectKBest(score_func=f_classif, k=min(k, len(feature_names)))
+    X_selected = selector.fit_transform(X, y)
+    
+    # Get selected feature names
+    selected_mask = selector.get_support()
+    selected_features = [feature_names[i] for i in range(len(feature_names)) if selected_mask[i]]
+    
+    return selected_features
 
 
 def save_preprocessed_data(X_train, X_valid, X_test, y_train, y_valid):
+    """Save preprocessed data to files."""
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     np.save(PROCESSED_DIR / "X_train.npy", X_train)
     np.save(PROCESSED_DIR / "X_valid.npy", X_valid)
@@ -91,17 +89,61 @@ def save_preprocessed_data(X_train, X_valid, X_test, y_train, y_valid):
 
 
 def preprocessing_pipeline(train_df: pd.DataFrame, test_df: pd.DataFrame):
-    X, X_test, y, feature_names, preprocessor = preprocess_data(train_df, test_df)
-    selected_features = select_features(X, y, feature_names)
-    X_df = pd.DataFrame(X, columns=feature_names)[selected_features]
-    X_test_df = pd.DataFrame(X_test, columns=feature_names)[selected_features]
-    X_train, X_valid, y_train, y_valid = split_data(X_df, y)
-    save_preprocessed_data(X_train.values, X_valid.values, X_test_df.values, y_train.values, y_valid.values)
-    return X_train, X_valid, X_test_df, y_train, y_valid, selected_features, preprocessor
+    """Complete preprocessing pipeline."""
+    # Preprocess data
+    X, X_test, y, feature_names, _ = preprocess_data(train_df, test_df)
+    
+    # Select important features (but keep more than before)
+    selected_features = select_features(X, y, feature_names, k=12)
+    
+    # Create DataFrame for easier indexing
+    X_df = pd.DataFrame(X, columns=feature_names)
+    X_test_df = pd.DataFrame(X_test, columns=feature_names)
+    
+    # Select only the chosen features
+    X_selected = X_df[selected_features]
+    X_test_selected = X_test_df[selected_features]
+    
+    # Split training data
+    X_train, X_valid, y_train, y_valid = split_data(X_selected, y)
+    
+    # Scale features
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_valid_scaled = scaler.transform(X_valid)
+    X_test_scaled = scaler.transform(X_test_selected)
+    
+    # Save processed data
+    save_preprocessed_data(X_train_scaled, X_valid_scaled, X_test_scaled, y_train.values, y_valid.values)
+    
+    print(f"Selected features: {selected_features}")
+    print(f"Training set size: {X_train_scaled.shape}")
+    print(f"Validation set size: {X_valid_scaled.shape}")
+    print(f"Test set size: {X_test_scaled.shape}")
+    
+    return X_train_scaled, X_valid_scaled, X_test_scaled, y_train, y_valid, selected_features, scaler
+
+
+# Legacy functions for compatibility
+def encode_categorical(df: pd.DataFrame) -> pd.DataFrame:
+    """Encode categorical columns using integer codes."""
+    df_encoded = df.copy()
+    cat_cols = df_encoded.select_dtypes(include=["object", "category"]).columns
+    for col in cat_cols:
+        df_encoded[col] = df_encoded[col].astype("category").cat.codes
+    return df_encoded
+
+
+def scale_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Scale numerical features to zero mean and unit variance."""
+    scaler = StandardScaler()
+    scaled = scaler.fit_transform(df)
+    return pd.DataFrame(scaled, columns=df.columns, index=df.index)
 
 
 if __name__ == "__main__":
     from data_loader import load_data
 
     train_df, test_df = load_data()
-    preprocessing_pipeline(train_df, test_df)
+    result = preprocessing_pipeline(train_df, test_df)
+    print("Preprocessing completed successfully!")

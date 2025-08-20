@@ -16,6 +16,36 @@ PARAMS_DIR = RESULTS_DIR / "hyperparameters"
 PARAMS_DIR.mkdir(exist_ok=True)
 
 
+def optimize_with_optuna(X, y, n_trials=5):
+    """Optimize a RandomForest model using Optuna for testing purposes."""
+    def objective(trial):
+        params = {
+            "n_estimators": trial.suggest_int("n_estimators", 50, 200),
+            "max_depth": trial.suggest_int("max_depth", 3, 10),
+            "min_samples_split": trial.suggest_int("min_samples_split", 2, 10),
+        }
+        model = RandomForestClassifier(**params, random_state=42)
+        cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+        scores = cross_val_score(model, X, y, cv=cv, scoring="accuracy")
+        return scores.mean()
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=n_trials)
+    return study.best_params, study.best_value
+
+
+def grid_search_optimization(X, y):
+    """Grid search optimization for RandomForest for testing purposes."""
+    param_grid = {
+        "n_estimators": [50, 100],
+        "max_depth": [3, 5, None],
+    }
+    model = RandomForestClassifier(random_state=42)
+    grid = GridSearchCV(model, param_grid, cv=3, scoring="accuracy")
+    grid.fit(X, y)
+    return grid.best_params_, grid.best_score_
+
+
 def optimize_xgboost(X: np.ndarray, y: np.ndarray, n_trials: int = 100) -> Tuple[XGBClassifier, Dict[str, Any]]:
     """Optuna optimization for XGBoost."""
 
