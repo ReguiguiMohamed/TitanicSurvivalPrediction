@@ -58,6 +58,18 @@ def save_data_summary(train: pd.DataFrame, test: pd.DataFrame,
         f.write(str(categorical_value_counts(test)) + "\n")
 
 
+def generate_data_summary() -> None:
+    """Generate and persist a simple textual summary of the data.
+
+    This helper is a thin wrapper used in the test-suite. It loads the raw
+    training and test sets and writes a summary file to
+    ``data/processed/data_summary.txt`` using :func:`save_data_summary`.
+    """
+
+    train, test = load_data()
+    save_data_summary(train, test)
+
+
 if __name__ == "__main__":
     train_df, test_df = load_data()
     save_data_summary(train_df, test_df)

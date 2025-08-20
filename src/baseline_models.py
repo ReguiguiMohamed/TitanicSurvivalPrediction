@@ -4,7 +4,7 @@ from pathlib import Path
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
-from sklearn.model_selection import cross_val_predict, StratifiedKFold
+from sklearn.model_selection import cross_val_predict, StratifiedKFold, train_test_split
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -15,6 +15,30 @@ from sklearn.metrics import (
 
 RESULTS_DIR = Path("results")
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def train_logistic_regression(X, y, test_size: float = 0.2, random_state: int = 42):
+    """Fit a logistic regression model and return the model with validation accuracy."""
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=test_size, stratify=y, random_state=random_state
+    )
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_train, y_train)
+    preds = model.predict(X_val)
+    score = accuracy_score(y_val, preds)
+    return model, score
+
+
+def train_random_forest(X, y, test_size: float = 0.2, random_state: int = 42):
+    """Fit a random forest classifier and return the model with validation accuracy."""
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=test_size, stratify=y, random_state=random_state
+    )
+    model = RandomForestClassifier(n_estimators=100, random_state=random_state)
+    model.fit(X_train, y_train)
+    preds = model.predict(X_val)
+    score = accuracy_score(y_val, preds)
+    return model, score
 
 
 def evaluate_model(model, X, y, cv: int = 5):

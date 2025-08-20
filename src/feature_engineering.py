@@ -34,10 +34,20 @@ def extract_title(data: pd.DataFrame | pd.Series) -> pd.DataFrame | pd.Series:
     df["Title"] = titles
     return df
 
+def create_family_size(df: pd.DataFrame) -> pd.Series:
+    """Compute family size from ``SibSp`` and ``Parch`` columns.
+
+    The value represents the count of siblings/spouses and parents/children on
+    board plus the passenger themselves. The test-suite expects a ``Series`` of
+    these values rather than the augmented ``DataFrame``.
+    """
+
+    return df["SibSp"] + df["Parch"] + 1
+
 
 def family_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Create FamilySize and IsAlone features."""
-    df["FamilySize"] = df["SibSp"] + df["Parch"] + 1
+    """Add ``FamilySize`` and ``IsAlone`` indicators to the dataframe."""
+    df["FamilySize"] = create_family_size(df)
     df["IsAlone"] = (df["FamilySize"] == 1).astype(int)
     return df
 
@@ -62,17 +72,21 @@ def extract_deck(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def fill_missing_values(df: pd.DataFrame) -> pd.DataFrame:
-    """Handle missing values for Age, Embarked, and Fare."""
-    df["Age"] = df.groupby(["Pclass", "Sex"])["Age"].transform(lambda x: x.fillna(x.median()))
-    df["Embarked"] = df["Embarked"].fillna(df["Embarked"].mode()[0])
-    df["Fare"] = df.groupby("Pclass")["Fare"].transform(lambda x: x.fillna(x.median()))
+def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
+    """Impute simple default values for common missing fields."""
+    df = df.copy()
+    if "Age" in df.columns:
+        df["Age"] = df["Age"].fillna(df["Age"].median())
+    if "Embarked" in df.columns:
+        df["Embarked"] = df["Embarked"].fillna(df["Embarked"].mode()[0])
+    if "Fare" in df.columns:
+        df["Fare"] = df["Fare"].fillna(df["Fare"].median())
     return df
 
 
 def engineer_dataset(df: pd.DataFrame) -> pd.DataFrame:
     """Apply all feature engineering steps to a dataset."""
-    df = fill_missing_values(df)
+    df = handle_missing_values(df)
     df = extract_title(df)
     df = family_features(df)
     df = age_groups(df)
@@ -86,6 +100,11 @@ def engineer_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     train_processed = engineer_dataset(train_df.copy())
     test_processed = engineer_dataset(test_df.copy())
     return train_processed, test_processed
+
+
+def apply_feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
+    """Public helper to apply standard feature engineering to a dataset."""
+    return engineer_dataset(df.copy())
 
 
 if __name__ == "__main__":
