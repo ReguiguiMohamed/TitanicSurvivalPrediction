@@ -16,6 +16,25 @@ Raw CSV files are stored in `data/raw`. The main training file is `train.csv` wh
 
 Feature engineering and preprocessing are implemented in `src/data_preprocessing.py`. The module handles missing values, derives additional features like `FamilySize` and `Title`, encodes categorical variables and scales numeric attributes. It exposes helper functions to fit and apply the preprocessing pipeline.
 
+An end-to-end training and prediction workflow is available in
+`src/automated_pipeline.py`.  The pipeline reads configuration from
+`config/pipeline_config.json`, trains a selection of models, logs
+performance metrics and writes a Kaggle submission file to the
+`submissions/` directory.
+
+To execute the full automated pipeline run:
+
+```bash
+python -m src.automated_pipeline
+```
+
+Performance metrics for each run are appended to
+`results/performance_log.csv` and can be analysed with the utilities in
+`src/performance_monitor.py`.
+
+For experimenting with different submission strategies and probability
+calibration techniques refer to `src/submission_optimizer.py`.
+
 ## Running the Code
 
 1. Install dependencies:
@@ -26,6 +45,15 @@ Feature engineering and preprocessing are implemented in `src/data_preprocessing
    ```bash
    jupyter notebook notebooks/02_eda.ipynb
    ```
+
+### Testing
+
+Unit tests cover key utility functions, data loading and the automated
+pipeline.  Run the full test suite with:
+
+```bash
+pytest
+```
 
 ## Results and Insights
 

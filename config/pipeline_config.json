@@ -1,0 +1,11 @@
+{
+  "model": {
+    "type": "LogisticRegression",
+    "params": {"max_iter": 200}
+  },
+  "group_cols": ["Sex", "Pclass"],
+  "target": "Survived",
+  "paths": {
+    "submission": "submissions/pipeline_submission.csv"
+  }
+}
