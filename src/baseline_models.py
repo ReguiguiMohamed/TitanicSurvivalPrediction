@@ -22,7 +22,7 @@ def train_logistic_regression(X, y, test_size: float = 0.2, random_state: int = 
     X_train, X_val, y_train, y_val = train_test_split(
         X, y, test_size=test_size, stratify=y, random_state=random_state
     )
-    model = LogisticRegression(max_iter=1000)
+    model = LogisticRegression(max_iter=1000, solver="liblinear", class_weight="balanced")
     model.fit(X_train, y_train)
     preds = model.predict(X_val)
     score = accuracy_score(y_val, preds)
@@ -34,7 +34,9 @@ def train_random_forest(X, y, test_size: float = 0.2, random_state: int = 42):
     X_train, X_val, y_train, y_val = train_test_split(
         X, y, test_size=test_size, stratify=y, random_state=random_state
     )
-    model = RandomForestClassifier(n_estimators=100, random_state=random_state)
+    model = RandomForestClassifier(
+        n_estimators=200, max_depth=None, random_state=random_state
+    )
     model.fit(X_train, y_train)
     preds = model.predict(X_val)
     score = accuracy_score(y_val, preds)
@@ -55,7 +57,7 @@ def evaluate_model(model, X, y, cv: int = 5):
 
 
 def logistic_regression_cv(X, y, cv: int = 5):
-    model = LogisticRegression(max_iter=1000)
+    model = LogisticRegression(max_iter=1000, solver="liblinear", class_weight="balanced")
     return evaluate_model(model, X, y, cv)
 
 
