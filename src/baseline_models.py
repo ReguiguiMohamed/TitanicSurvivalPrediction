@@ -5,6 +5,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from sklearn.model_selection import cross_val_predict, StratifiedKFold, train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -18,24 +20,40 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def train_logistic_regression(X, y, test_size: float = 0.2, random_state: int = 42):
-    """Fit a logistic regression model and return the model with validation accuracy."""
+    """Fit a logistic regression pipeline and return it with validation accuracy."""
     X_train, X_val, y_train, y_val = train_test_split(
         X, y, test_size=test_size, stratify=y, random_state=random_state
     )
-    model = LogisticRegression(max_iter=1000, solver="liblinear", class_weight="balanced")
-    model.fit(X_train, y_train)
-    preds = model.predict(X_val)
+
+    pipeline = Pipeline(
+        [
+            ("scaler", StandardScaler()),
+            (
+                "model",
+                LogisticRegression(
+                    max_iter=1000, solver="liblinear", class_weight="balanced", C=0.5
+                ),
+            ),
+        ]
+    )
+    pipeline.fit(X_train, y_train)
+    preds = pipeline.predict(X_val)
     score = accuracy_score(y_val, preds)
-    return model, score
+    return pipeline, score
 
 
 def train_random_forest(X, y, test_size: float = 0.2, random_state: int = 42):
-    """Fit a random forest classifier and return the model with validation accuracy."""
+    """Fit a tuned random forest and return it with validation accuracy."""
     X_train, X_val, y_train, y_val = train_test_split(
         X, y, test_size=test_size, stratify=y, random_state=random_state
     )
     model = RandomForestClassifier(
-        n_estimators=200, max_depth=None, random_state=random_state
+        n_estimators=300,
+        max_depth=7,
+        min_samples_split=4,
+        min_samples_leaf=2,
+        max_features="sqrt",
+        random_state=random_state,
     )
     model.fit(X_train, y_train)
     preds = model.predict(X_val)
@@ -44,6 +62,7 @@ def train_random_forest(X, y, test_size: float = 0.2, random_state: int = 42):
 
 
 def evaluate_model(model, X, y, cv: int = 5):
+    """Evaluate a model using cross-validated predictions."""
     skf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=42)
     preds = cross_val_predict(model, X, y, cv=skf)
     metrics = {
@@ -57,12 +76,29 @@ def evaluate_model(model, X, y, cv: int = 5):
 
 
 def logistic_regression_cv(X, y, cv: int = 5):
-    model = LogisticRegression(max_iter=1000, solver="liblinear", class_weight="balanced")
-    return evaluate_model(model, X, y, cv)
+    pipeline = Pipeline(
+        [
+            ("scaler", StandardScaler()),
+            (
+                "model",
+                LogisticRegression(
+                    max_iter=1000, solver="liblinear", class_weight="balanced", C=0.5
+                ),
+            ),
+        ]
+    )
+    return evaluate_model(pipeline, X, y, cv)
 
 
 def random_forest_cv(X, y, cv: int = 5):
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model = RandomForestClassifier(
+        n_estimators=300,
+        max_depth=7,
+        min_samples_split=4,
+        min_samples_leaf=2,
+        max_features="sqrt",
+        random_state=42,
+    )
     return evaluate_model(model, X, y, cv)
 
 
