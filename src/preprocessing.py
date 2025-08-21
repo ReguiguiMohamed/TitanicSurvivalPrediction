@@ -55,12 +55,30 @@ def preprocess_data(train_df: pd.DataFrame, test_df: pd.DataFrame, target: str =
             X[col] = X[col].fillna(median_val)
             X_test[col] = X_test[col].fillna(median_val)
     
+    # One-hot encode categorical variables consistently across train and test
+    categorical_cols = [
+        "Pclass",
+        "Sex",
+        "Embarked",
+        "Title",
+        "AgeGroup",
+        "FareBin",
+        "Deck",
+    ]
+    combined = pd.concat([X, X_test], axis=0)
+    combined = pd.get_dummies(
+        combined, columns=[c for c in categorical_cols if c in combined.columns], drop_first=True
+    )
+    n_train = len(X)
+    X = combined.iloc[:n_train, :]
+    X_test = combined.iloc[n_train:, :]
+
     # Convert to numpy arrays
     X_processed = X.values.astype(np.float32)
     X_test_processed = X_test.values.astype(np.float32)
-    
+
     feature_names = X.columns.tolist()
-    
+
     return X_processed, X_test_processed, y, feature_names, None
 
 
@@ -92,36 +110,30 @@ def preprocessing_pipeline(train_df: pd.DataFrame, test_df: pd.DataFrame):
     """Complete preprocessing pipeline."""
     # Preprocess data
     X, X_test, y, feature_names, _ = preprocess_data(train_df, test_df)
-    
-    # Select important features (but keep more than before)
-    selected_features = select_features(X, y, feature_names, k=12)
-    
-    # Create DataFrame for easier indexing
+
+    # Create DataFrame for easier handling
     X_df = pd.DataFrame(X, columns=feature_names)
     X_test_df = pd.DataFrame(X_test, columns=feature_names)
-    
-    # Select only the chosen features
-    X_selected = X_df[selected_features]
-    X_test_selected = X_test_df[selected_features]
-    
+
     # Split training data
-    X_train, X_valid, y_train, y_valid = split_data(X_selected, y)
-    
+    X_train, X_valid, y_train, y_valid = split_data(X_df, y)
+
     # Scale features
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_valid_scaled = scaler.transform(X_valid)
-    X_test_scaled = scaler.transform(X_test_selected)
-    
+    X_test_scaled = scaler.transform(X_test_df)
+
     # Save processed data
-    save_preprocessed_data(X_train_scaled, X_valid_scaled, X_test_scaled, y_train.values, y_valid.values)
-    
-    print(f"Selected features: {selected_features}")
+    save_preprocessed_data(
+        X_train_scaled, X_valid_scaled, X_test_scaled, y_train.values, y_valid.values
+    )
+
     print(f"Training set size: {X_train_scaled.shape}")
     print(f"Validation set size: {X_valid_scaled.shape}")
     print(f"Test set size: {X_test_scaled.shape}")
-    
-    return X_train_scaled, X_valid_scaled, X_test_scaled, y_train, y_valid, selected_features, scaler
+
+    return X_train_scaled, X_valid_scaled, X_test_scaled, y_train, y_valid, feature_names, scaler
 
 
 # Legacy functions for compatibility
